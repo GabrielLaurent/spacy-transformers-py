@@ -1,43 +1,24 @@
-import logging
-import logging.config
-from typing import Dict
+from typing import Optional, Dict, Any
+from transformers import AutoModel
+
+def get_model_name(name: str) -> str:
+    '''
+    Helper function to extract the model name from a string.
+    '''
+    if "::" in name:
+        name = name.split("::", 1)[1]
+    return name
 
 
-def log_config(logger: logging.Logger, config: Dict):
-    logger.debug("Configuration:")
-    for key, value in config.items():
-        logger.debug(f"  {key}: {value}")
+def init_transformer_model(hf_model_name: str, model_config: Dict[str, Any]) -> AutoModel:
+    '''
+    Initializes the transformer model based on the provided name and config.
+    '''
+    model_name = get_model_name(hf_model_name)
+    try:
+        model = AutoModel.from_pretrained(model_name, **model_config)
+    except Exception as e:
+        print(f"Error initializing model {model_name}: {e}")
+        raise
 
-
-def setup_default_logging():
-    logging_config = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'standard': {
-                'format': '%(asctime)s [%(levelname)s] %(name)s - %(message)s'
-            },
-        },
-        'handlers': {
-            'default': {
-                'level': 'INFO',
-                'formatter': 'standard',
-                'class': 'logging.StreamHandler',
-                'stream': 'ext://sys.stdout',
-            },
-        },
-        'loggers': {
-            'spacy_transformers': {
-                'handlers': ['default'],
-                'level': 'INFO',
-                'propagate': True
-            }
-        }
-    }
-
-    logging.config.dictConfig(logging_config)
-
-replace_listeners = lambda obj: None # Dummy function to prevent errors
-
-# Initialize logging (call this early in your application)
-setup_default_logging()
+    return model
