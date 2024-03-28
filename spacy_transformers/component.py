@@ -1,23 +1,62 @@
+import logging
+
 import spacy
 from spacy.language import Language
-from spacy.util import registry
-from spacy_transformers.wrapper.hf_wrapper import TransformerWrapper
+from spacy.tokens import Doc
+
+from .data_processing import batch_by_length
+from .util import replace_listeners, log_config
 
 
-@registry.architectures.register("spacy-transformers.TransformerModel")
-def build_transformer_model(name: str) -> TransformerWrapper:
-    return TransformerWrapper(name=name)
+logger = logging.getLogger(__name__)
 
 
-@Language.factory("transformer_model", assigns=["token._.transformer_data"])
-def make_transformer_model(nlp: Language, name: str):
-    return TransformerComponent(nlp, name=name)
+@spacy.component("transformer")
+class Transformer:  # Renamed for clarity
+    def __init__(self, vocab: spacy.vocab.Vocab, model, name: str = "transformer"):
+        self.name = name
+        self.model = model
+        self.vocab = vocab
+        self.logger = logging.getLogger(f"{__name__}.{name}")
+        log_config(self.logger, {"model": str(model)})
+
+    def __call__(self, doc: Doc):
+        try:
+            self.logger.debug(f"Calling transformer on doc: '{doc.text}'")
+            encoding = self.model.predict([doc])
+            doc._.set("transformer_output", encoding)
+            self.logger.debug(f"Transformer output shape: {encoding.shape if encoding is not None else None}")
+            return doc
+        except Exception as e:
+            self.logger.exception(f"Error processing doc: '{doc.text}'")
+            raise e
 
 
-class TransformerComponent:
-    def __init__(self, nlp: Language, name: str):
-        self.model = registry.architectures.get("spacy-transformers.TransformerModel")(name=name)
+@spacy.language.Language.factory(
+    "transformer",
+    default_config={
+        "model": {
+            "@layers": "spacy-transformers.TransformerModel.v1",
+        }
+    },
+)
+def make_transformer(
+    nlp: Language,
+    name: str,
+    model,
+):
+    return Transformer(nlp.vocab, model, name=name)
 
-    def __call__(self, doc):
-        doc = self.model(doc)
+
+@Language.component("transformer_pipe")
+def transformer_pipe(
+doc,
+model
+):
+    try:
+        encoding = model.predict([doc])
+        doc._.set("transformer_output", encoding)
         return doc
+    except Exception as e:
+        logger.exception(f"Error processing doc: '{doc.text}'")
+        raise e
