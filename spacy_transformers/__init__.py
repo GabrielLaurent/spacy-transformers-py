@@ -1,3 +1,1 @@
-from .component import TransformerComponent
-
-__all__ = ["TransformerComponent"]
+from .component import make_transformer, Transformer
